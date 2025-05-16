@@ -14,19 +14,58 @@ const ratingButtons = document.querySelectorAll('.rating-btn');
 const currentCardSpan = document.getElementById('current-card');
 const totalCardsSpan = document.getElementById('total-cards');
 const moreInfoBtn = document.getElementById('more-info-btn');
+const aiToggle = document.getElementById('ai-toggle');
+const apiKeyBtn = document.getElementById('api-key-btn');
+const apiKeyStatus = document.querySelector('.api-key-status');
 
 // Global variables
 let flashcards = [];
 let currentCardIndex = 0;
 let speechSynthesis = window.speechSynthesis;
+let useAI = true; // Toggle for AI-powered extraction
 
 // Initialize PDF.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// API Key Management - In production, use server-side API key handling
+const OPENAI_API_KEY_STORAGE_KEY = 'flashcards_openai_api_key';
+let openaiApiKey = localStorage.getItem(OPENAI_API_KEY_STORAGE_KEY) || '';
+
+// Update UI based on API key status
+function updateApiKeyStatus() {
+    if (openaiApiKey) {
+        apiKeyStatus.textContent = "API Key Set";
+        apiKeyStatus.style.color = "var(--success)";
+    } else {
+        apiKeyStatus.textContent = "Not Set";
+        apiKeyStatus.style.color = "var(--gray-600)";
+    }
+}
+
+// Initialize UI
+updateApiKeyStatus();
 
 // Event Listeners
 processBtn.addEventListener('click', processPDF);
 showAnswerBtn.addEventListener('click', showAnswer);
 moreInfoBtn.addEventListener('click', explainFurther);
+
+// AI toggle event listener
+aiToggle.addEventListener('change', function() {
+    useAI = this.checked;
+});
+
+// API Key button event listener
+apiKeyBtn.addEventListener('click', function() {
+    const newKey = prompt('Enter your OpenAI API key for AI-powered flashcard generation:', openaiApiKey);
+    
+    // Only update if user provided a value (not cancelled)
+    if (newKey !== null) {
+        openaiApiKey = newKey.trim();
+        localStorage.setItem(OPENAI_API_KEY_STORAGE_KEY, openaiApiKey);
+        updateApiKeyStatus();
+    }
+});
 
 // File input change event
 pdfUpload.addEventListener('change', function() {
@@ -92,6 +131,27 @@ async function processPDF() {
         return;
     }
     
+    // Check if AI extraction is enabled and we need to get an API key
+    if (useAI && !openaiApiKey) {
+        const shouldGetApiKey = confirm('AI-powered flashcard generation requires an OpenAI API key. Would you like to enter one now?');
+        
+        if (shouldGetApiKey) {
+            openaiApiKey = prompt('Enter your OpenAI API key:');
+            if (openaiApiKey) {
+                localStorage.setItem(OPENAI_API_KEY_STORAGE_KEY, openaiApiKey);
+                updateApiKeyStatus();
+            } else {
+                // User cancelled, fall back to basic extraction
+                useAI = false;
+                aiToggle.checked = false;
+            }
+        } else {
+            // User declined to enter API key, fall back to basic extraction
+            useAI = false;
+            aiToggle.checked = false;
+        }
+    }
+    
     try {
         // Create a loading indicator
         const container = document.querySelector('.container');
@@ -131,11 +191,22 @@ async function processPDF() {
             loadingElement.innerHTML = `<p>Processing page ${i} of ${pdf.numPages}...</p>`;
         }
         
-        // Remove loading indicator
-        loadingElement.remove();
+        // Update loading message for AI processing
+        if (useAI && openaiApiKey) {
+            loadingElement.innerHTML = '<p>Using AI to generate high-quality flashcards...</p>';
+        } else {
+            loadingElement.innerHTML = '<p>Generating flashcards from extracted text...</p>';
+        }
         
         // Generate flashcards from the extracted text
-        generateFlashcards(extractedText);
+        if (useAI && openaiApiKey) {
+            await generateAIFlashcards(extractedText);
+        } else {
+            generateFlashcards(extractedText);
+        }
+        
+        // Remove loading indicator
+        loadingElement.remove();
         
         // Show the flashcard section
         flashcardSection.style.display = 'block';
@@ -150,6 +221,89 @@ async function processPDF() {
         console.error('Error processing PDF:', error);
         alert('Error processing PDF. Please try again.');
         document.querySelector('.loading-indicator')?.remove();
+    }
+}
+
+// Generate flashcards using AI
+async function generateAIFlashcards(text) {
+    try {
+        // Limit text size to avoid token limits
+        const maxLength = 10000;
+        const truncatedText = text.length > maxLength ? text.substring(0, maxLength) + "... (content truncated)" : text;
+        
+        // Prepare the API request
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${openaiApiKey}`
+            },
+            body: JSON.stringify({
+                model: 'gpt-3.5-turbo',
+                messages: [
+                    {
+                        role: 'system',
+                        content: 'You are an expert at creating educational flashcards. Generate a set of question-answer pairs from the provided text. Focus on key concepts, definitions, important facts, and relationships between ideas. Create clear questions with comprehensive answers.'
+                    },
+                    {
+                        role: 'user',
+                        content: `Create flashcards from the following text. Format your response as JSON in the following format EXACTLY:
+                        [
+                            {
+                                "question": "Question text goes here?",
+                                "answer": "Answer text goes here.",
+                                "details": "Additional context or explanation goes here."
+                            }
+                        ]
+                        
+                        Here's the text to analyze:
+                        ${truncatedText}`
+                    }
+                ],
+                temperature: 0.7,
+                max_tokens: 2000
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Parse the response to extract flashcards
+        try {
+            const responseText = data.choices[0].message.content;
+            // Find the JSON array in the response
+            const jsonMatch = responseText.match(/\[\s*\{[\s\S]*\}\s*\]/);
+            
+            if (jsonMatch) {
+                const extractedJson = jsonMatch[0];
+                flashcards = JSON.parse(extractedJson);
+                
+                // Ensure all cards have a details field
+                flashcards = flashcards.map(card => {
+                    if (!card.details) {
+                        card.details = { fullContext: "Additional information not provided." };
+                    } else if (typeof card.details === 'string') {
+                        card.details = { fullContext: card.details };
+                    }
+                    return card;
+                });
+            } else {
+                throw new Error("Couldn't parse AI response");
+            }
+        } catch (parseError) {
+            console.error("Error parsing AI response:", parseError);
+            // Fallback to traditional extraction
+            generateFlashcards(text);
+        }
+        
+    } catch (error) {
+        console.error("AI Flashcard Generation Error:", error);
+        alert(`Error using AI to generate flashcards: ${error.message}. Falling back to basic extraction.`);
+        // Fallback to traditional extraction
+        generateFlashcards(text);
     }
 }
 

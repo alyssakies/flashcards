@@ -33,6 +33,22 @@
                     <div>Drag & drop a PDF file here or click to browse</div>
                 </span>
             </label>
+            
+            <div class="ai-options">
+                <div class="switch-container">
+                    <label class="switch">
+                        <input type="checkbox" id="ai-toggle" checked>
+                        <span class="slider round"></span>
+                    </label>
+                    <span class="switch-label">Use AI-powered flashcard generation</span>
+                </div>
+                <div class="api-key-container">
+                    <button id="api-key-btn" class="secondary-btn">Set OpenAI API Key</button>
+                    <div class="api-key-status">Not set</div>
+                </div>
+                <p class="ai-info">AI-powered generation creates higher quality flashcards but requires an OpenAI API key.</p>
+            </div>
+            
             <button id="process-btn">Process PDF</button>
         </div>
         
