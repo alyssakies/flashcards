@@ -227,9 +227,8 @@ async function processPDF() {
 // Generate flashcards using AI
 async function generateAIFlashcards(text) {
     try {
-        // Limit text size to avoid token limits
-        const maxLength = 10000;
-        const truncatedText = text.length > maxLength ? text.substring(0, maxLength) + "... (content truncated)" : text;
+        // Get a more reasonable text size to avoid token limits and reduce API costs
+        const processedText = prepareTextForAI(text);
         
         // Prepare the API request
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -247,7 +246,7 @@ async function generateAIFlashcards(text) {
                     },
                     {
                         role: 'user',
-                        content: `Create flashcards from the following text. Format your response as JSON in the following format EXACTLY:
+                        content: `Create 5-10 flashcards from the following text. Format your response as JSON in the following format EXACTLY:
                         [
                             {
                                 "question": "Question text goes here?",
@@ -257,16 +256,41 @@ async function generateAIFlashcards(text) {
                         ]
                         
                         Here's the text to analyze:
-                        ${truncatedText}`
+                        ${processedText}`
                     }
                 ],
                 temperature: 0.7,
-                max_tokens: 2000
+                max_tokens: 1500
             })
         });
         
         if (!response.ok) {
-            throw new Error(`API error: ${response.status}`);
+            // Get more detailed error information when available
+            let errorMessage = `API error: ${response.status}`;
+            
+            try {
+                const errorData = await response.json();
+                if (errorData && errorData.error) {
+                    errorMessage += ` - ${errorData.error.message || errorData.error.type || ''}`;
+                }
+            } catch (e) {
+                // Could not parse error JSON, continue with basic error
+            }
+            
+            // Handle specific error codes with more helpful messages
+            if (response.status === 429) {
+                errorMessage = "Rate limit exceeded. This usually means you've used up your OpenAI API quota or are sending too many requests. You may need to upgrade your OpenAI plan or check your billing status.";
+            } else if (response.status === 401) {
+                errorMessage = "Authentication error. Your API key may be invalid or expired.";
+                // Clear the invalid API key
+                openaiApiKey = '';
+                localStorage.removeItem(OPENAI_API_KEY_STORAGE_KEY);
+                updateApiKeyStatus();
+                aiToggle.checked = false;
+                useAI = false;
+            }
+            
+            throw new Error(errorMessage);
         }
         
         const data = await response.json();
@@ -305,6 +329,40 @@ async function generateAIFlashcards(text) {
         // Fallback to traditional extraction
         generateFlashcards(text);
     }
+}
+
+// Prepare text for AI processing to reduce token usage
+function prepareTextForAI(text) {
+    // Maximum size to send to the API
+    const maxLength = 6000;
+    
+    if (text.length <= maxLength) {
+        return text;
+    }
+    
+    // For longer documents, we'll extract representative portions
+    
+    // 1. Get the beginning (introduction often has important concepts)
+    const beginning = text.substring(0, Math.floor(maxLength * 0.3));
+    
+    // 2. Get pieces from the middle (content)
+    const middleStart = Math.floor(text.length * 0.4);
+    const middleLength = Math.floor(maxLength * 0.4);
+    const middle = text.substring(middleStart, middleStart + middleLength);
+    
+    // 3. Get the end (often has summaries and conclusions)
+    const endStart = Math.max(0, text.length - Math.floor(maxLength * 0.3));
+    const end = text.substring(endStart);
+    
+    // Combine with section markers
+    return `[BEGINNING OF DOCUMENT]
+${beginning}
+
+[MIDDLE SECTION OF DOCUMENT]
+${middle}
+
+[END OF DOCUMENT]
+${end}`;
 }
 
 // Function to generate flashcards from extracted text
