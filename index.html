@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>PDF Flashcard App</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css?v=2">
+    <script>
+        window.onerror = function(message, source, lineno, colno, error) {
+            alert('JavaScript Error: ' + message + ' at line ' + lineno);
+            return true;
+        };
+    </script>
+    <!-- Load PDF.js first -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- Load Tesseract.js -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>PDF Flashcard Learning System</h1>
+        
+        <!-- PDF Upload Section -->
+        <div class="upload-section">
+            <h2>Upload Your PDF</h2>
+            <label for="pdf-upload" class="file-input-label">
+                <input type="file" id="pdf-upload" accept=".pdf">
+                <span class="file-input-text">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    <div>Drag & drop a PDF file here or click to browse</div>
+                </span>
+            </label>
+            
+            <div class="ai-options">
+                <p class="ai-info">Using AI-powered flashcard generation for optimal learning experience.</p>
+            </div>
+            
+            <button id="process-btn">Process PDF</button>
+        </div>
+        
+        <!-- Flashcard Section (initially hidden) -->
+        <div class="flashcard-section" style="display: none;">
+            <div id="flashcard">
+                <div id="question-container">
+                    <h3>Question</h3>
+                    <p id="question-text"></p>
+                    <button id="speak-question">Listen to Question</button>
+                    
+                    <div id="voice-input-container">
+                        <button id="listen-answer">Speak Your Answer</button>
+                        <div id="speech-status">
+                            <div class="pulse-ball"></div>
+                            <span>Click button to speak your answer</span>
+                        </div>
+                    </div>
+                    <button id="show-answer">Show Answer</button>
+                </div>
+                <div id="answer-container" style="display: none;">
+                    <h3>Answer</h3>
+                    <p id="answer-text"></p>
+                    
+                    <button id="more-info-btn">Explain Further</button>
+                    
+                    <div id="rating-container">
+                        <h4>Rate your confidence (1-5)</h4>
+                        <div class="rating-buttons">
+                            <button class="rating-btn" data-rating="1">1</button>
+                            <button class="rating-btn" data-rating="2">2</button>
+                            <button class="rating-btn" data-rating="3">3</button>
+                            <button class="rating-btn" data-rating="4">4</button>
+                            <button class="rating-btn" data-rating="5">5</button>
+                        </div>
+                        <div class="button-container">
+                            <button id="next-btn" class="next-btn">Next</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="progress">
+                <p>Card <span id="current-card">0</span> of <span id="total-cards">0</span></p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Load our app script last -->
+    <script src="app.js?v=2"></script>
+</body>
+</html>
